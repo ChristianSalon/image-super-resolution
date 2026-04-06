@@ -25,7 +25,7 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
     # Training
     for epoch in range(epochs):
         srcnn.train()
-        running_loss = 0.0
+        epoch_loss = 0.0
 
         for i, (lr_image, ground_truth_hr_image) in enumerate(train_loader, 0):
             lr_image = lr_image.to(device)
@@ -49,10 +49,10 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
             optimizer.step()
 
             # Print statistics
-            running_loss += loss.item()
-            if i % 100 == 99:
-                print(f"[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 100:.3f}")
-                running_loss = 0.0
+            epoch_loss += loss.item()
+            print(f"Epoch {epoch}, Batch {i}: batch_loss={loss.item() / 100:.6f}")
+
+        print(f"Epoch {epoch}: loss={epoch_loss / 100:.6f}")
 
         torch.save(srcnn.state_dict(), f"{f"{save_path}/" if save_path else ""}srcnn_{scale}x_latest.pth")
 
@@ -64,12 +64,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="Training ISR", description="Training script for image super-resolution using ML"
     )
-    parser.add_argument("model")
-    parser.add_argument("-s", "--scale", type=int, default=4)
-    parser.add_argument("-p", "--patch-size", type=int, default=64)
-    parser.add_argument("-b", "--batch-size", type=int, default=8)
-    parser.add_argument("-e", "--epochs", type=int, default=100)
-    parser.add_argument("-sp", "--save-path", type=str)
+    parser.add_argument("model", type=str, choices=["srcnn"], help="Selected ML model")
+    parser.add_argument("-s", "--scale", type=int, default=2, help="Upscale factor")
+    parser.add_argument("-p", "--patch-size", type=int, default=64, help="Image size used for training")
+    parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size")
+    parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs")
+    parser.add_argument("-sp", "--save-path", type=str, help="Directory where to save trained NN")
 
     args = parser.parse_args()
 

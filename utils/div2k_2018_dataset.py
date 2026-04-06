@@ -3,7 +3,7 @@ import random
 import torch
 
 from enum import StrEnum
-from torchvision.io import decode_image
+from torchvision.io import decode_image, ImageReadMode
 import torchvision.transforms.v2.functional as F
 
 
@@ -47,12 +47,12 @@ class Div2k2018TrainDataset(torch.utils.data.Dataset):
         # lr image [C, W, H]
         lr_name = f"{index_in_variant:04d}{variant_suffix}{random.randint(1, 4) if variant_directory is VariantDirectory.LR_WILD else ""}.png"
         lr_path = os.path.join(self.PATH_PREFIX, variant_directory, lr_name)
-        lr_image = decode_image(lr_path).float() / 255.0
+        lr_image = decode_image(lr_path, mode=ImageReadMode.RGB).float() / 255.0
 
         # hr image
         hr_name = f"{index_in_variant:04d}.png"
         hr_path = os.path.join(self.PATH_PREFIX, "hr", hr_name)
-        hr_image = decode_image(hr_path).float() / 255.0
+        hr_image = decode_image(hr_path, mode=ImageReadMode.RGB).float() / 255.0
 
         # Random crop
         _, h_lr, w_lr = lr_image.shape
