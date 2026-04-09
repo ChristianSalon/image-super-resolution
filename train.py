@@ -9,9 +9,9 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Training dataset
-    train_dataset = Div2k2018TrainDataset(scale=scale, patch_size=patch_size)
+    train_dataset = Div2k2018TrainDataset(scale=scale, patch_size=patch_size, scale_variant=scale)
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=(device.type == "cuda")
     )
 
     # ML model
@@ -20,7 +20,13 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
     # Loss function
     criterion = torch.nn.MSELoss()
     # Optimization algorithm
-    optimizer = torch.optim.Adam(srcnn.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(
+        [
+            {"params": srcnn.conv1.parameters(), "lr": 1e-4},
+            {"params": srcnn.conv2.parameters(), "lr": 1e-4},
+            {"params": srcnn.conv3.parameters(), "lr": 1e-5},
+        ]
+    )
 
     # Training
     for epoch in range(epochs):
@@ -35,6 +41,7 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
             lr_image = torch.nn.functional.interpolate(
                 lr_image, scale_factor=scale, mode="bicubic", align_corners=False
             )
+            lr_image = torch.clamp(lr_image, 0, 1)
 
             # Zero out the parameter gradients
             optimizer.zero_grad()
@@ -50,13 +57,12 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
 
             # Print statistics
             epoch_loss += loss.item()
-            print(f"Epoch {epoch}, Batch {i}: batch_loss={loss.item() / 100:.6f}")
+            print(f"Epoch {epoch}, Batch {i}: batch_loss={loss.item():.6f}")
 
-        print(f"Epoch {epoch}: loss={epoch_loss / 100:.6f}")
+        avg_epoch_loss = epoch_loss / len(train_loader)
+        print(f"Epoch {epoch}: average_loss={avg_epoch_loss:.6f}")
 
-        torch.save(srcnn.state_dict(), f"{f"{save_path}/" if save_path else ""}srcnn_{scale}x_latest.pth")
-
-    torch.save(srcnn.state_dict(), f"{f"{save_path}/" if save_path else ""}srcnn_{scale}x_final.pth")
+        torch.save(srcnn.state_dict(), f"{f"{save_path}/" if save_path else ""}srcnn_{scale}x_e{epoch}.pth")
 
 
 def main() -> None:

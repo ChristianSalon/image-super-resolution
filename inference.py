@@ -56,7 +56,6 @@ def main() -> None:
     print(f"PyTorch version: {torch.__version__}")
     print(f"Is CUDA available: {torch.cuda.is_available()}")
 
-    # Train selected model
     if args.model == "srcnn":
         run_srcnn(
             scale=args.scale,
