@@ -2,7 +2,58 @@ import argparse
 import torch
 
 from models.srcnn import SRCNN
+from models.vdsr import VDSR
 from utils.div2k_2018_dataset import Div2k2018TrainDataset
+
+def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    lr = 1e-1  # high learning rate for VDSR
+
+    train_dataset = Div2k2018TrainDataset(scale=scale, patch_size=patch_size, scale_variant=scale)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=(device.type == "cuda")
+    )
+
+    vdsr = VDSR().to(device)
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(vdsr.parameters(), lr=lr)
+    scaler = torch.amp.GradScaler('cuda', enabled=(device.type == "cuda"))
+
+    for epoch in range(epochs):
+        vdsr.train()
+        epoch_loss = 0.0
+
+        for i, (lr_image, ground_truth_hr_image) in enumerate(train_loader, 0):
+            lr_image = lr_image.to(device, non_blocking=True)
+            ground_truth_hr_image = ground_truth_hr_image.to(device, non_blocking=True)
+
+            # Upscale lr image (Data Pipeline requirement)
+            lr_image = torch.nn.functional.interpolate(
+                lr_image, scale_factor=scale, mode="bicubic", align_corners=False
+            ).clamp(0, 1)
+
+            optimizer.zero_grad(set_to_none=True)
+            
+            with torch.amp.autocast('cuda', enabled=(device.type == "cuda")):
+                output_hr_image = vdsr(lr_image)
+                loss = criterion(output_hr_image, ground_truth_hr_image)
+            
+            scaler.scale(loss).backward()
+
+            # Gradient Clipping: clip at 0.1 / lr
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(vdsr.parameters(), 0.1 / lr)
+            scaler.step(optimizer)
+            scaler.update()
+
+            epoch_loss += loss.item()
+            if i % 10 == 0:
+                print(f"Epoch {epoch}, Batch {i}: batch_loss={loss.item():.6f}")
+
+        avg_epoch_loss = epoch_loss / len(train_loader)
+        print(f"Epoch {epoch}: average_loss={avg_epoch_loss:.6f}")
+        torch.save(vdsr.state_dict(), f"{f'{save_path}/' if save_path else ''}vdsr_{scale}x_e{epoch}.pth")
+
 
 
 def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None) -> None:
@@ -34,8 +85,8 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
         epoch_loss = 0.0
 
         for i, (lr_image, ground_truth_hr_image) in enumerate(train_loader, 0):
-            lr_image = lr_image.to(device)
-            ground_truth_hr_image = ground_truth_hr_image.to(device)
+            lr_image = lr_image.to(device, non_blocking=True)
+            ground_truth_hr_image = ground_truth_hr_image.to(device, non_blocking=True)
 
             # Upscale lr image
             lr_image = torch.nn.functional.interpolate(
@@ -44,7 +95,7 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
             lr_image = torch.clamp(lr_image, 0, 1)
 
             # Zero out the parameter gradients
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             # Forward
             output_hr_image = srcnn(lr_image)
@@ -62,15 +113,16 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
         avg_epoch_loss = epoch_loss / len(train_loader)
         print(f"Epoch {epoch}: average_loss={avg_epoch_loss:.6f}")
 
-        torch.save(srcnn.state_dict(), f"{f"{save_path}/" if save_path else ""}srcnn_{scale}x_e{epoch}.pth")
+        torch.save(srcnn.state_dict(), f"{f'{save_path}/' if save_path else ''}srcnn_{scale}x_e{epoch}.pth")
 
 
 def main() -> None:
+    torch.backends.cudnn.benchmark = True
     # Parse arguments
     parser = argparse.ArgumentParser(
         prog="Training ISR", description="Training script for image super-resolution using ML"
     )
-    parser.add_argument("model", type=str, choices=["srcnn"], help="Selected ML model")
+    parser.add_argument("model", type=str, choices=["srcnn", "vdsr"], help="Selected ML model")
     parser.add_argument("-s", "--scale", type=int, default=2, help="Upscale factor")
     parser.add_argument("-p", "--patch-size", type=int, default=64, help="Image size used for training")
     parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size")
@@ -86,6 +138,14 @@ def main() -> None:
     # Train selected model
     if args.model == "srcnn":
         train_srcnn(
+            scale=args.scale,
+            patch_size=args.patch_size,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            save_path=args.save_path,
+        )
+    elif args.model == "vdsr":
+        train_vdsr(
             scale=args.scale,
             patch_size=args.patch_size,
             batch_size=args.batch_size,

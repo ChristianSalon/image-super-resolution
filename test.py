@@ -4,6 +4,7 @@ import torch
 import torchvision.transforms.v2.functional as F
 
 from models.srcnn import SRCNN
+from models.vdsr import VDSR
 from pathlib import Path
 from torchvision.utils import save_image
 from utils.div2k_2018_dataset import Div2k2018TestDataset
@@ -46,7 +47,7 @@ def run_test(model, test_loader, scale: int, save_folder: Path) -> tuple[float, 
     return (total_psnr / count, total_ssim / count)
 
 
-def test_srcnn(scale: int, model_path: str, output_dir: str) -> None:
+def test_model(model_choice: str, scale: int, model_path: str, output_dir: str) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Testing dataset
@@ -56,7 +57,10 @@ def test_srcnn(scale: int, model_path: str, output_dir: str) -> None:
     )
 
     # Load model
-    model = SRCNN().to(device)
+    if model_choice == "srcnn":
+        model = SRCNN().to(device)
+    else:
+        model = VDSR().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     save_folder = Path(output_dir)
@@ -72,7 +76,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="Testing ISR", description="Testing script for image super-resolution using ML"
     )
-    parser.add_argument("model", type=str, choices=["srcnn"], help="Selected ML model")
+    parser.add_argument("model", type=str, choices=["srcnn", "vdsr"], help="Selected ML model")
     parser.add_argument("-s", "--scale", type=int, default=4, help="Upscale factor")
     parser.add_argument(
         "-mp", "--model-path", type=str, required=True, help="Path to .pth file (must align with scale)"
@@ -85,12 +89,8 @@ def main() -> None:
     print(f"PyTorch version: {torch.__version__}")
     print(f"Is CUDA available: {torch.cuda.is_available()}")
 
-    if args.model == "srcnn":
-        test_srcnn(
-            scale=args.scale,
-            model_path=args.model_path,
-            output_dir=args.output_dir,
-        )
+    if args.model in ["srcnn", "vdsr"]:
+        test_model(args.model, args.scale, args.model_path, args.output_dir)
     else:
         print("Invalid model")
 

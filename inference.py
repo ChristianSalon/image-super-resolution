@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 from models.srcnn import SRCNN
+from models.vdsr import VDSR
 from torchvision.io import decode_image, ImageReadMode
 from torchvision.utils import save_image
 
@@ -19,7 +20,7 @@ def run_inference(model, lr_image_tensor):
         return output
 
 
-def run_srcnn(scale: int, model_path: str, input_path: str, output_path: str) -> None:
+def run_inference_script(model_choice: str, scale: int, model_path: str, input_path: str, output_path: str) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     lr_image = decode_image(input_path, mode=ImageReadMode.RGB).float() / 255.0
@@ -29,7 +30,11 @@ def run_srcnn(scale: int, model_path: str, input_path: str, output_path: str) ->
     lr_image = torch.nn.functional.interpolate(lr_image, scale_factor=scale, mode="bicubic", align_corners=False)
 
     # Load model
-    model = SRCNN().to(device)
+    if model_choice == "srcnn":
+        model = SRCNN().to(device)
+    else:
+        model = VDSR().to(device)
+
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     output = run_inference(model=model, lr_image_tensor=lr_image)
@@ -42,7 +47,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="Inference ISR", description="Inference script for image super-resolution using ML"
     )
-    parser.add_argument("model", type=str, choices=["srcnn"], help="Selected ML model")
+    parser.add_argument("model", type=str, choices=["srcnn", "vdsr"], help="Selected ML model")
     parser.add_argument("-s", "--scale", type=int, default=4, help="Upscale factor")
     parser.add_argument(
         "-mp", "--model-path", type=str, required=True, help="Path to .pth file (must align with scale)"
@@ -56,13 +61,8 @@ def main() -> None:
     print(f"PyTorch version: {torch.__version__}")
     print(f"Is CUDA available: {torch.cuda.is_available()}")
 
-    if args.model == "srcnn":
-        run_srcnn(
-            scale=args.scale,
-            model_path=args.model_path,
-            input_path=args.input_path,
-            output_path=args.output_path,
-        )
+    if args.model in ["srcnn", "vdsr"]:
+        run_inference_script(args.model, args.scale, args.model_path, args.input_path, args.output_path)
     else:
         print("Invalid model")
 
