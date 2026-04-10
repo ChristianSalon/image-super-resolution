@@ -63,6 +63,7 @@ def test_srcnn(scale: int, model_path: str, output_dir: str) -> None:
 
 
 def main() -> None:
+    torch.backends.cudnn.benchmark = True
     # Parse arguments
     parser = argparse.ArgumentParser(
         prog="Testing ISR", description="Testing script for image super-resolution using ML"
