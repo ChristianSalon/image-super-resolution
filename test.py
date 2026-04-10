@@ -1,6 +1,7 @@
 import argparse
 import piq
 import torch
+import torchvision.transforms.v2.functional as F
 
 from models.srcnn import SRCNN
 from pathlib import Path
@@ -28,14 +29,18 @@ def run_test(model, test_loader, scale: int, save_folder: Path) -> tuple[float, 
             # Inference
             hr_output = model(lr_upscaled).clamp(0, 1)
 
+            # Crop HR to same size
+            h, w = hr_output.shape[-2:]
+            gt_cropped = F.center_crop(ground_truth_hr_image, [h, w])
+
             # Compute metrics
-            psnr = piq.psnr(hr_output, ground_truth_hr_image, data_range=1.0)
-            ssim = piq.ssim(hr_output, ground_truth_hr_image, data_range=1.0)
+            psnr = piq.psnr(hr_output, gt_cropped, data_range=1.0)
+            ssim = piq.ssim(hr_output, gt_cropped, data_range=1.0)
             total_psnr += psnr.item()
             total_ssim += ssim.item()
 
             save_image(hr_output, save_folder / f"{i:04d}.png")
-            print(f"Image {i}: PSNR={psnr.item():.6f}")
+            print(f"Image {i}: PSNR={psnr.item():.6f}, SSIM={ssim.item():.6f}")
 
     count = len(test_loader)
     return (total_psnr / count, total_ssim / count)
@@ -45,7 +50,7 @@ def test_srcnn(scale: int, model_path: str, output_dir: str) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Testing dataset
-    test_dataset = Div2k2018TestDataset(scale=scale)
+    test_dataset = Div2k2018TestDataset(scale=scale, scale_variant=scale)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=1, shuffle=False, num_workers=2, pin_memory=(device.type == "cuda")
     )
@@ -54,8 +59,7 @@ def test_srcnn(scale: int, model_path: str, output_dir: str) -> None:
     model = SRCNN().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
 
-    model_name = Path(model_path).stem
-    save_folder = Path(output_dir) / model_name
+    save_folder = Path(output_dir)
     save_folder.mkdir(parents=True, exist_ok=True)
 
     average_psnr, average_ssim = run_test(model=model, test_loader=test_loader, scale=scale, save_folder=save_folder)

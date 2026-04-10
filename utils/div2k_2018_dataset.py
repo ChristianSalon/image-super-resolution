@@ -35,7 +35,6 @@ class VariantSuffix(StrEnum):
 
 
 class Div2k2018Dataset(torch.utils.data.Dataset):
-    INDEX_OFFSET = 1
 
     VARIANTS = {
         2: [
@@ -58,6 +57,8 @@ class Div2k2018Dataset(torch.utils.data.Dataset):
         ],
     }
 
+    IMAGE_OFFSET = 0
+
     def __init__(self, scale: int, patch_size: int | None = None, scale_variant: str | int = "all"):
         self.scale = scale
         self.patch_size = patch_size
@@ -78,7 +79,7 @@ class Div2k2018Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         variant_index = index // self.HR_DATA_SIZE
-        index_in_variant = (index % self.HR_DATA_SIZE) + self.INDEX_OFFSET
+        index_in_variant = (index % self.HR_DATA_SIZE) + 1 + self.IMAGE_OFFSET
         variant_directory, variant_suffix = self.active_variants[variant_index]
 
         # lr image [C, W, H]
@@ -113,7 +114,7 @@ class Div2k2018TestDataset(Div2k2018Dataset):
 
     PATH_PREFIX = "data/test/div2k_2018"
     HR_DATA_SIZE = 100
-    INDEX_OFFSET = 801
+    IMAGE_OFFSET = 800
 
     def __init__(self, scale: int, patch_size: int | None = None, scale_variant: str | int = "all"):
         super().__init__(scale=scale, patch_size=patch_size, scale_variant=scale_variant)
@@ -123,7 +124,7 @@ class Div2k2018TrainDataset(Div2k2018Dataset):
 
     PATH_PREFIX = "data/train/div2k_2018"
     HR_DATA_SIZE = 800
-    INDEX_OFFSET = 1
+    IMAGE_OFFSET = 0
 
     def __init__(self, scale: int, patch_size: int | None = None, scale_variant: str | int = "all"):
         super().__init__(scale=scale, patch_size=patch_size, scale_variant=scale_variant)
