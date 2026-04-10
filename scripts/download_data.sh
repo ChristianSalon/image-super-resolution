@@ -35,6 +35,7 @@ cd ../../test
 
 # div2k 2018 validation dataset
 mkdir -p div2k_2018
+cd div2k_2018
 
 wget -c http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip
 unzip -n -j DIV2K_valid_HR.zip -d hr
