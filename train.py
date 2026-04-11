@@ -7,7 +7,7 @@ from utils.div2k_2018_dataset import Div2k2018TrainDataset
 
 def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    lr = 1e-1  # high learning rate for VDSR
+    lr = 1e-4  # high learning rate for VDSR
 
     train_dataset = Div2k2018TrainDataset(scale=scale, patch_size=patch_size, scale_variant=scale)
     train_loader = torch.utils.data.DataLoader(
