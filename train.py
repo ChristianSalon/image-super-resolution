@@ -1,11 +1,15 @@
 import argparse
 import torch
+import os
 
 from models.srcnn import SRCNN
 from models.vdsr import VDSR
 from utils.div2k_2018_dataset import Div2k2018TrainDataset
 
-def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None) -> None:
+def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None, resume_path: str | None = None) -> None:
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     lr = 1e-4  # high learning rate for VDSR
 
@@ -15,6 +19,11 @@ def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_p
     )
 
     vdsr = VDSR().to(device)
+
+    if resume_path:
+        print(f"Loading previous weights from: {resume_path}")
+        vdsr.load_state_dict(torch.load(resume_path, map_location=device, weights_only=True))
+
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(vdsr.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(device.type == "cuda"))
@@ -56,7 +65,10 @@ def train_vdsr(scale: int, patch_size: int, batch_size: int, epochs: int, save_p
 
 
 
-def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None) -> None:
+def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_path: str | None, resume_path: str | None = None) -> None:
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Training dataset
@@ -67,6 +79,10 @@ def train_srcnn(scale: int, patch_size: int, batch_size: int, epochs: int, save_
 
     # ML model
     srcnn = SRCNN().to(device)
+
+    if resume_path:
+        print(f"Loading previous weights from: {resume_path}")
+        srcnn.load_state_dict(torch.load(resume_path, map_location=device, weights_only=True))
 
     # Loss function
     criterion = torch.nn.MSELoss()
@@ -128,6 +144,7 @@ def main() -> None:
     parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size")
     parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs")
     parser.add_argument("-sp", "--save-path", type=str, help="Directory where to save trained NN")
+    parser.add_argument("-r", "--resume", type=str, default=None, help="Path to .pth file to resume training")
 
     args = parser.parse_args()
 
@@ -143,6 +160,7 @@ def main() -> None:
             batch_size=args.batch_size,
             epochs=args.epochs,
             save_path=args.save_path,
+            resume_path=args.resume,
         )
     elif args.model == "vdsr":
         train_vdsr(
@@ -151,6 +169,7 @@ def main() -> None:
             batch_size=args.batch_size,
             epochs=args.epochs,
             save_path=args.save_path,
+            resume_path=args.resume,
         )
     else:
         print("Invalid model")
