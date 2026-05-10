@@ -147,7 +147,7 @@ def train_rlsp(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Training dataset
-    train_dataset = RedsDataset(root_dir="data/train/reds/train_sharp", patch_size=patch_size)
+    train_dataset = RedsDataset(root_dir="data/train/reds/train/train_sharp", patch_size=patch_size)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=(device.type == "cuda")
     )
