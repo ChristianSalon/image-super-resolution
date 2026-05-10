@@ -109,6 +109,7 @@ def run_evaluation(args):
     root = Path(args.input)
     master_stats = []
 
+    # Check if input is a file or a directory
     if root.is_file():
         tasks = [("SingleVideo", root, None)]
     else:
