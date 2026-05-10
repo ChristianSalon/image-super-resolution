@@ -9,14 +9,14 @@ import torchvision.transforms.v2.functional as F
 
 
 class RedsDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, seq_length=15, patch_size=64, scale=4, is_train=True):
+    def __init__(self, root_dir, seq_length=10, patch_size=64, scale=4, is_train=True):
         self.root_dir = root_dir
         self.seq_length = seq_length
         self.patch_size = patch_size
         self.scale = scale
         self.is_train = is_train
 
-        self.video_list = sorted(glob.glob(os.path.join(root_dir, "*")))
+        self.video_list = sorted(glob.glob(os.path.join(root_dir, "*")))[:10]
 
         self.frames_per_video = 100
         self.num_segments = self.frames_per_video - self.seq_length + 1
@@ -39,7 +39,7 @@ class RedsDataset(torch.utils.data.Dataset):
             hr_seq.append(hr_img)
 
         # Random crop
-        _, w, h = hr_seq[0].shape
+        _, h, w = hr_seq[0].shape
         if self.is_train:
             # Random top left corner for the HR patch
             th, tw = self.patch_size * self.scale, self.patch_size * self.scale
