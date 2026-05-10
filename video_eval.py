@@ -62,7 +62,7 @@ def process_item(model, lr_path: Path, gt_path: Path, out_path: Path, scale: int
         lr_tensor = frame_to_tensor(frame, device)
         lr_upscaled = torch.nn.functional.interpolate(lr_tensor, size=(out_h, out_w), mode="bicubic", align_corners=False).clamp(0, 1)
 
-        # Timing with synchronization (fix for the 1700 FPS bug)
+        # Timing with synchronization
         if device.type == 'cuda': torch.cuda.synchronize()
         start = time.perf_counter()
         
@@ -153,7 +153,7 @@ def run_evaluation(args):
     root = Path(args.input)
     master_stats = []
 
-    # Check if input is a file (testvideo1.mp4) or a directory (data/video_test)
+    # Check if input is a file or a directory
     if root.is_file():
         tasks = [("SingleVideo", root, None)]
     else:
