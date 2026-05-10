@@ -54,3 +54,28 @@ mkdir -p lr_lan_4x
 mkdir -p lr_lan_8x
 
 python ../../../utils/init_dataset.py --input hr --output .
+
+mkdir -p data/train
+mkdir -p data/test
+
+# REDS
+cd data/train
+
+mkdir -p reds
+cd reds
+
+wget -c https://seungjunnah.github.io/Datasets/reds/train_sharp.zip
+unzip -n -j train_sharp.zip -d train_sharp
+
+cd ../..
+
+# Vid4
+cd test
+
+mkdir -p vid4
+cd vid4
+
+wget -c https://github.com/flyywh/Video-Super-Resolution-Test-Datasets/raw/master/Vid4.zip
+unzip -n Vid4.zip
+
+cd ../..
