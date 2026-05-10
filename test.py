@@ -10,13 +10,30 @@ from torchvision.utils import save_image
 from utils.div2k_2018_dataset import Div2k2018TestDataset
 
 
+def test_interpolation(scale: int, output_dir: str) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    test_dataset = Div2k2018TestDataset(scale=scale, scale_variant=scale)
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=1, shuffle=False, num_workers=2, pin_memory=(device.type == "cuda")
+    )
+
+    save_folder = Path(output_dir)
+    save_folder.mkdir(parents=True, exist_ok=True)
+
+    average_psnr, average_ssim = run_test(model=None, test_loader=test_loader, scale=scale, save_folder=save_folder)
+    print(f"Average PSNR={average_psnr}, Average SSIM={average_ssim}")
+
+
 def run_test(model, test_loader, scale: int, save_folder: Path) -> tuple[float, float]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     total_psnr = 0.0
     total_ssim = 0.0
 
-    model.eval()
+    if model is not None:
+        model.eval()
+
     with torch.no_grad():
         for i, (lr_image, ground_truth_hr_image) in enumerate(test_loader):
             lr_image = lr_image.to(device)
@@ -28,7 +45,10 @@ def run_test(model, test_loader, scale: int, save_folder: Path) -> tuple[float, 
             ).clamp(0, 1)
 
             # Inference
-            hr_output = model(lr_upscaled).clamp(0, 1)
+            if model is None:
+                hr_output = lr_upscaled
+            else:
+                hr_output = model(lr_upscaled).clamp(0, 1)
 
             # Crop HR to same size
             h, w = hr_output.shape[-2:]
@@ -76,7 +96,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="Testing ISR", description="Testing script for image super-resolution using ML"
     )
-    parser.add_argument("model", type=str, choices=["srcnn", "vdsr"], help="Selected ML model")
+    parser.add_argument("model", type=str, choices=["srcnn", "vdsr", "bicubic"], help="Selected ML model")
     parser.add_argument("-s", "--scale", type=int, default=4, help="Upscale factor")
     parser.add_argument(
         "-mp", "--model-path", type=str, required=True, help="Path to .pth file (must align with scale)"
@@ -91,6 +111,8 @@ def main() -> None:
 
     if args.model in ["srcnn", "vdsr"]:
         test_model(args.model, args.scale, args.model_path, args.output_dir)
+    elif args.model == "bicubic":
+        test_interpolation(args.scale, args.output_dir)
     else:
         print("Invalid model")
 
