@@ -4,3 +4,4 @@ piq
 numpy
 matplotlib
 opencv-python
+gradio
