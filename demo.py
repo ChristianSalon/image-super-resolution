@@ -1,17 +1,20 @@
 import os
+import math
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import gradio as gr
+import piq 
+from skimage.metrics import structural_similarity as ssim_metric
 
-
+# Internal repository imports
 from models.srcnn import SRCNN
 from models.vdsr import VDSR
 from models.rlsp import RLSP
 
 def process_demo(input_img, scale, downscale_algo):
     if input_img is None:
-        return [None] * 17
+        return [None] * 17 + [""] * 8
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -44,7 +47,7 @@ def process_demo(input_img, scale, downscale_algo):
     if scale == 8:
         vdsr_path = "export/vdsr/mix_2x(19e)_8x/vdsr_8x_e13.pth"
     else:
-        vdsr_path = "export/vdsr/{scale}x/vdsr_{scale}x_e19.pth"
+        vdsr_path = f"export/vdsr/{scale}x/vdsr_{scale}x_e19.pth"
         
     rlsp_path = "export/rlsp/4x/rlsp_4x_e19.pth" if scale == 4 else ""
     
@@ -56,6 +59,31 @@ def process_demo(input_img, scale, downscale_algo):
         
     def prepare_visualization(tensor, factor=5.0):
         return (tensor.abs() * factor).clamp(0, 1)
+
+    def calculate_metrics(sr_tensor, pred_res_tensor):
+        if sr_tensor is None:
+            return "**PSNR:** N/A | **SSIM:** N/A", "**MSE:** N/A | **Kosínusová podobnosť:** N/A"
+        
+        # PSNR Metric
+        mse_loss = F.mse_loss(sr_tensor, hr_tensor).item()
+        psnr = 20 * math.log10(1.0 / math.sqrt(mse_loss)) if mse_loss > 0 else float('inf')
+        
+        # SSIM Metric
+        img1 = sr_tensor.squeeze(0).cpu().permute(1, 2, 0).numpy()
+        img2 = hr_tensor.squeeze(0).cpu().permute(1, 2, 0).numpy()
+        ssim = ssim_metric(img1, img2, data_range=1.0, channel_axis=2)
+            
+        # Residual MSE Metric
+        res_mse = F.mse_loss(pred_res_tensor, ideal_residual).item()
+        
+        # Cosine Similarity Metric
+        v1 = pred_res_tensor.flatten()
+        v2 = ideal_residual.flatten()
+        cos_sim = F.cosine_similarity(v1, v2, dim=0).item()
+            
+        out_str = f"**PSNR:** {psnr:.2f} dB | **SSIM:** {ssim:.4f}"
+        res_str = f"**MSE:** {res_mse:.6f} | **Kosínusová podobnosť:** {cos_sim:.4f}"
+        return out_str, res_str
 
     srcnn_out, srcnn_res = None, None
     vdsr_out, vdsr_res = None, None
@@ -99,6 +127,12 @@ def process_demo(input_img, scale, downscale_algo):
     rlsp_pil = to_pil(rlsp_out)
     rlsp_res_pil = to_pil(prepare_visualization(rlsp_res)) if rlsp_res is not None else None
 
+    # Calculate metrics for Layout B
+    bic_out_m, bic_res_m = calculate_metrics(bicubic_upscaled, ideal_residual)
+    srcnn_out_m, srcnn_res_m = calculate_metrics(srcnn_out, srcnn_res)
+    vdsr_out_m, vdsr_res_m = calculate_metrics(vdsr_out, vdsr_res)
+    rlsp_out_m, rlsp_res_m = calculate_metrics(rlsp_out, rlsp_res)
+
     return (
         lr_pil,
         # Grid layout views
@@ -110,7 +144,12 @@ def process_demo(input_img, scale, downscale_algo):
         bic_pil, bic_res_pil,
         srcnn_pil, srcnn_res_pil,
         vdsr_pil, vdsr_res_pil,
-        rlsp_pil, rlsp_res_pil
+        rlsp_pil, rlsp_res_pil,
+        # Tabbed metrics strings
+        bic_out_m, bic_res_m,
+        srcnn_out_m, srcnn_res_m,
+        vdsr_out_m, vdsr_res_m,
+        rlsp_out_m, rlsp_res_m
     )
 
 def toggle_layouts(choice):
@@ -219,31 +258,47 @@ with gr.Blocks() as demo:
                 with gr.Tabs():
                     with gr.TabItem("Bicubic (No Model)"):
                         with gr.Row():
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_bic_img = gr.Image(label="Bicubic Output", image_mode="RGB", interactive=False)
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_bic_res = gr.Image(label="Ideal Residual (Error x5)", image_mode="RGB", interactive=False)
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_bic_img = gr.Image(label="Bicubic Output", image_mode="RGB", interactive=False)
+                                tab_bic_out_m = gr.Markdown("**PSNR:** - dB | **SSIM:** -")
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_bic_res = gr.Image(label="Ideal Residual (Error x5)", image_mode="RGB", interactive=False)
+                                tab_bic_res_m = gr.Markdown("**MSE:** - | **Kosínusová podobnosť:** -")
                     
                     with gr.TabItem("SRCNN"):
                         with gr.Row():
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_srcnn_img = gr.Image(label="SRCNN Output", image_mode="RGB", interactive=False)
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_srcnn_res = gr.Image(label="SRCNN Residual (Error x5)", image_mode="RGB", interactive=False)
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_srcnn_img = gr.Image(label="SRCNN Output", image_mode="RGB", interactive=False)
+                                tab_srcnn_out_m = gr.Markdown("**PSNR:** - dB | **SSIM:** -")
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_srcnn_res = gr.Image(label="SRCNN Residual (Error x5)", image_mode="RGB", interactive=False)
+                                tab_srcnn_res_m = gr.Markdown("**MSE:** - | **Kosínusová podobnosť:** -")
                             
                     with gr.TabItem("VDSR"):
                         with gr.Row():
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_vdsr_img = gr.Image(label="VDSR Output", image_mode="RGB", interactive=False)
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_vdsr_res = gr.Image(label="VDSR Residual (Error x5)", image_mode="RGB", interactive=False)
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_vdsr_img = gr.Image(label="VDSR Output", image_mode="RGB", interactive=False)
+                                tab_vdsr_out_m = gr.Markdown("**PSNR:** - dB | **SSIM:** -")
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_vdsr_res = gr.Image(label="VDSR Residual (Error x5)", image_mode="RGB", interactive=False)
+                                tab_vdsr_res_m = gr.Markdown("**MSE:** - | **Kosínusová podobnosť:** -")
                             
                     with gr.TabItem("RLSP (4x Only)"):
                         with gr.Row():
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_rlsp_img = gr.Image(label="RLSP Output", image_mode="RGB", interactive=False)
-                            with gr.Column(elem_classes=["zoom-container"]):
-                                tab_rlsp_res = gr.Image(label="RLSP Residual (Error x5)", image_mode="RGB", interactive=False)
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_rlsp_img = gr.Image(label="RLSP Output", image_mode="RGB", interactive=False)
+                                tab_rlsp_out_m = gr.Markdown("**PSNR:** - dB | **SSIM:** -")
+                            with gr.Column():
+                                with gr.Column(elem_classes=["zoom-container"]):
+                                    tab_rlsp_res = gr.Image(label="RLSP Residual (Error x5)", image_mode="RGB", interactive=False)
+                                tab_rlsp_res_m = gr.Markdown("**MSE:** - | **Kosínusová podobnosť:** -")
 
     # Wire interface workspace visibility toggles
     layout_mode.change(
@@ -275,7 +330,12 @@ with gr.Blocks() as demo:
             tab_bic_img, tab_bic_res,
             tab_srcnn_img, tab_srcnn_res,
             tab_vdsr_img, tab_vdsr_res,
-            tab_rlsp_img, tab_rlsp_res
+            tab_rlsp_img, tab_rlsp_res,
+            # Tabbed Metrics Elements
+            tab_bic_out_m, tab_bic_res_m,
+            tab_srcnn_out_m, tab_srcnn_res_m,
+            tab_vdsr_out_m, tab_vdsr_res_m,
+            tab_rlsp_out_m, tab_rlsp_res_m
         ]
     ).then(
         fn=None,
